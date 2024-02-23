@@ -70,6 +70,9 @@ var (
 	pathBuilderGetValidators = "/relay/v1/builder/validators"
 	pathSubmitNewBlock       = "/relay/v1/builder/blocks"
 
+	// PreConfirmations API
+	pathGetTransactionInclusionInfo = "/relay/v1/builder/inclusion"
+
 	// Data API
 	pathDataProposerPayloadDelivered = "/relay/v1/data/bidtraces/proposer_payload_delivered"
 	pathDataBuilderBidsReceived      = "/relay/v1/data/bidtraces/builder_blocks_received"
@@ -129,11 +132,12 @@ type RelayAPIOpts struct {
 	EthNetDetails common.EthNetworkDetails
 
 	// APIs to enable
-	ProposerAPI     bool
-	BlockBuilderAPI bool
-	DataAPI         bool
-	PprofAPI        bool
-	InternalAPI     bool
+	ProposerAPI         bool
+	BlockBuilderAPI     bool
+	DataAPI             bool
+	PreConfirmationsAPI bool
+	PprofAPI            bool
+	InternalAPI         bool
 }
 
 type payloadAttributesHelper struct {
@@ -355,6 +359,12 @@ func (api *RelayAPI) getRouter() http.Handler {
 		r.HandleFunc(pathDataProposerPayloadDelivered, api.handleDataProposerPayloadDelivered).Methods(http.MethodGet)
 		r.HandleFunc(pathDataBuilderBidsReceived, api.handleDataBuilderBidsReceived).Methods(http.MethodGet)
 		r.HandleFunc(pathDataValidatorRegistration, api.handleDataValidatorRegistration).Methods(http.MethodGet)
+	}
+
+	// PreConfirmations API
+	if api.opts.PreConfirmationsAPI {
+		api.log.Info("pre-confirmations API enabled")
+		r.HandleFunc(pathGetTransactionInclusionInfo, api.handleGetTxInclusionInfo).Methods(http.MethodGet)
 	}
 
 	// Pprof
@@ -2488,6 +2498,50 @@ func (api *RelayAPI) handleDataValidatorRegistration(w http.ResponseWriter, req 
 	}
 
 	api.RespondOK(w, signedRegistration)
+}
+
+// --------------------
+//
+//	PRE CONFIRMATION APIS
+//
+// --------------------
+
+func (api *RelayAPI) handleGetTxInclusionInfo(w http.ResponseWriter, req *http.Request) {
+	var err error
+	args := req.URL.Query()
+
+	filters := database.GetBuilderSubmissionsFilters{
+		Limit:         0,
+		Slot:          0,
+		BlockHash:     "",
+		BlockNumber:   0,
+		BuilderPubkey: "",
+	}
+
+	if args.Get("slot") != "" {
+		filters.Slot, err = strconv.ParseUint(args.Get("slot"), 10, 64)
+		if err != nil {
+			api.RespondError(w, http.StatusBadRequest, "invalid slot argument")
+			return
+		}
+	}
+
+	if args.Get("block_number") != "" {
+		filters.BlockNumber, err = strconv.ParseUint(args.Get("block_number"), 10, 64)
+		if err != nil {
+			api.RespondError(w, http.StatusBadRequest, "invalid block_number argument")
+			return
+		}
+	}
+
+	// Args will supply a list of contract addresses seperated by commas
+	// filterAddresses := args.Get("contract_address")
+
+	// Get all blocks submitted by bundlers to be proposed for the provided slot
+
+	// Iterate over all the blocks submitted, get payload for each block and look for the inclusion transactions to `filterAddresses`
+
+	// Return all transactions that have toAddress as one of the filterAddresses
 }
 
 func (api *RelayAPI) handleLivez(w http.ResponseWriter, req *http.Request) {
